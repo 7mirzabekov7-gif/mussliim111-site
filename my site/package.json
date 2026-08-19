@@ -1,7 +1,17 @@
 {
-  "name":"napominanie-v1-5",
-  "version":"1.5.0",
-  "private":true,
-  "scripts":{"start":"node server.js"},
-  "dependencies":{"dotenv":"^16.4.7","express":"^5.1.0"}
+  "name": "napominanie-v1-8",
+  "version": "1.8.0",
+  "private": true,
+  "description": "Напоминание — сайт Telegram-канала mussliim111",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cheerio": "^1.1.2",
+    "express": "^5.1.0"
+  }
 }
