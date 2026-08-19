@@ -10,21 +10,39 @@ const CHANNEL = (process.env.CHANNEL || '@mussliim111')
   .replace(/^@/, '')
   .trim();
 
-const BOT_TOKEN = (process.env.BOT_TOKEN || '').trim();
-
 const CHANNEL_URL = `https://t.me/s/${CHANNEL}`;
 
+const MAX_POSTS = 12;
+const REFRESH_INTERVAL = 60 * 1000;
+
+
+/* =========================================================
+   EXPRESS
+========================================================= */
+
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+
+app.use(
+  express.static(
+    path.join(__dirname, 'public')
+  )
+);
+
+
+/* =========================================================
+   КЭШ
+========================================================= */
 
 let cache = [];
+
 let lastUpdated = null;
+
 let refreshing = false;
 
 
-/* =========================
-   ТЕКСТ
-========================= */
+/* =========================================================
+   ОЧИСТКА ТЕКСТА
+========================================================= */
 
 function cleanText(value = '') {
   return String(value)
@@ -35,43 +53,99 @@ function cleanText(value = '') {
 }
 
 
-function normalize(value = '') {
-  return cleanText(value)
-    .toLowerCase()
-    .replace(/[«»“”"'.,!?;:—–-]/g, '')
-    .replace(/\s+/g, ' ')
-    .trim();
+/* =========================================================
+   ПОЛУЧЕНИЕ ID TELEGRAM-ПОСТА
+========================================================= */
+
+function getTelegramPostId(node) {
+  const dataPost =
+    node.attr('data-post') || '';
+
+  if (!dataPost) {
+    return '';
+  }
+
+  const parts =
+    dataPost.split('/');
+
+  return parts[parts.length - 1] || '';
 }
 
 
-function uniquePosts(posts) {
-  const seen = new Set();
+/* =========================================================
+   ПОЛУЧЕНИЕ ИЗОБРАЖЕНИЯ
+========================================================= */
 
-  return posts.filter(post => {
-    const key = normalize(post.text);
+function getBackgroundImage(node, selector) {
+  const element = node
+    .find(selector)
+    .first();
 
-    if (!key || seen.has(key)) {
-      return false;
-    }
+  if (!element.length) {
+    return '';
+  }
 
-    seen.add(key);
-    return true;
-  });
+  const style =
+    element.attr('style') || '';
+
+  const match = style.match(
+    /url\(['"]?([^'")]+)['"]?\)/
+  );
+
+  return match
+    ? match[1]
+    : '';
 }
 
 
-/* =========================
-   ПУБЛИЧНЫЙ TELEGRAM
-========================= */
+/* =========================================================
+   ПОЛУЧЕНИЕ АКТУАЛЬНЫХ ПОСТОВ TELEGRAM
+========================================================= */
 
 async function fetchPublicTelegramPosts() {
 
-  const response = await fetch(CHANNEL_URL, {
-    headers: {
-      'User-Agent':
-        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36'
+  /*
+   * Добавляем уникальный параметр к URL,
+   * чтобы не получать старую закэшированную
+   * версию публичной страницы Telegram.
+   */
+  const cacheBuster =
+    `${Date.now()}-${Math.random()
+      .toString(36)
+      .slice(2)}`;
+
+  const url =
+    `${CHANNEL_URL}?_=${cacheBuster}`;
+
+
+  console.log(
+    `[Telegram] Запрос: ${url}`
+  );
+
+
+  const response = await fetch(
+    url,
+    {
+      method: 'GET',
+
+      cache: 'no-store',
+
+      headers: {
+        'Cache-Control':
+          'no-cache, no-store, max-age=0',
+
+        'Pragma':
+          'no-cache',
+
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36',
+
+        'Accept':
+          'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8'
+      }
     }
-  });
+  );
+
 
   if (!response.ok) {
     throw new Error(
@@ -79,247 +153,257 @@ async function fetchPublicTelegramPosts() {
     );
   }
 
-  const html = await response.text();
 
-  const $ = cheerio.load(html);
+  const html =
+    await response.text();
+
+
+  if (!html || html.length < 1000) {
+    throw new Error(
+      'Telegram вернул пустую или неполную страницу'
+    );
+  }
+
+
+  const $ =
+    cheerio.load(html);
+
 
   const posts = [];
-
-  $('.tgme_widget_message').each((_, element) => {
-
-    const node = $(element);
-
-    const dataPost =
-      node.attr('data-post') || '';
-
-    const id =
-      dataPost.split('/').pop();
-
-    if (!id) {
-      return;
-    }
-
-
-    /* Текст */
-
-    const text = cleanText(
-      node
-        .find('.tgme_widget_message_text')
-        .text()
-    );
-
-
-    /* Дата */
-
-    const date =
-      node
-        .find('time')
-        .attr('datetime') || '';
-
-
-    /* Ссылка */
-
-    const url =
-      node
-        .find('.tgme_widget_message_date')
-        .attr('href') ||
-      `https://t.me/${CHANNEL}/${id}`;
-
-
-    /* Картинка */
-
-    let image = '';
-
-
-    const photo =
-      node
-        .find('.tgme_widget_message_photo_wrap')
-        .first();
-
-
-    if (photo.length) {
-
-      const style =
-        photo.attr('style') || '';
-
-      const match =
-        style.match(
-          /url\(['"]?([^'")]+)['"]?\)/
-        );
-
-      if (match) {
-        image = match[1];
-      }
-    }
-
-
-    /* Видео */
-
-    if (!image) {
-
-      const video =
-        node
-          .find('.tgme_widget_message_video_player')
-          .first();
-
-      const style =
-        video.attr('style') || '';
-
-      const match =
-        style.match(
-          /url\(['"]?([^'")]+)['"]?\)/
-        );
-
-      if (match) {
-        image = match[1];
-      }
-    }
-
-
-    if (!text && !image) {
-      return;
-    }
-
-
-    posts.push({
-      id,
-      text: text || 'Новое напоминание',
-      date,
-      image,
-      url
-    });
-
-  });
 
 
   /*
-   * Новые сначала
+   * Telegram размещает сообщения
+   * внутри .tgme_widget_message
+   */
+  $('.tgme_widget_message').each(
+    (_, element) => {
+
+      const node =
+        $(element);
+
+
+      /*
+       * =================================================
+       * ID ПОСТА
+       * =================================================
+       */
+
+      const id =
+        getTelegramPostId(node);
+
+
+      if (!id) {
+        return;
+      }
+
+
+      /*
+       * =================================================
+       * ТЕКСТ
+       * =================================================
+       */
+
+      const text =
+        cleanText(
+          node
+            .find(
+              '.tgme_widget_message_text'
+            )
+            .text()
+        );
+
+
+      /*
+       * =================================================
+       * ДАТА
+       * =================================================
+       */
+
+      const date =
+        node
+          .find('time')
+          .attr('datetime') || '';
+
+
+      /*
+       * =================================================
+       * ССЫЛКА
+       * =================================================
+       */
+
+      const telegramLink =
+        node
+          .find(
+            '.tgme_widget_message_date'
+          )
+          .attr('href');
+
+
+      const link =
+        telegramLink ||
+        `https://t.me/${CHANNEL}/${id}`;
+
+
+      /*
+       * =================================================
+       * ФОТО
+       * =================================================
+       */
+
+      let image =
+        getBackgroundImage(
+          node,
+          '.tgme_widget_message_photo_wrap'
+        );
+
+
+      /*
+       * =================================================
+       * ВИДЕО-ПРЕВЬЮ
+       * =================================================
+       */
+
+      if (!image) {
+
+        image =
+          getBackgroundImage(
+            node,
+            '.tgme_widget_message_video_player'
+          );
+
+      }
+
+
+      /*
+       * =================================================
+       * АЛЬБОМ / MEDIA PREVIEW
+       * =================================================
+       */
+
+      if (!image) {
+
+        image =
+          getBackgroundImage(
+            node,
+            '.tgme_widget_message_roundvideo'
+          );
+
+      }
+
+
+      /*
+       * =================================================
+       * ПУБЛИКАЦИЯ
+       *
+       * Должен быть текст или изображение.
+       * =================================================
+       */
+
+      if (!text && !image) {
+        return;
+      }
+
+
+      /*
+       * =================================================
+       * СОХРАНЯЕМ ПОСТ
+       * =================================================
+       */
+
+      posts.push({
+
+        /*
+         * ВАЖНО:
+         * используем настоящий ID Telegram.
+         */
+        id: String(id),
+
+        text:
+          text ||
+          'Новое напоминание',
+
+        date,
+
+        image,
+
+        url: link
+
+      });
+
+    }
+  );
+
+
+  /*
+   * Telegram отдаёт посты
+   * от старых к новым.
+   *
+   * Разворачиваем:
+   * новый → старый.
+   */
+  posts.reverse();
+
+
+  /*
+   * =================================================
+   * УБИРАЕМ ДУБЛИ ПО ID
+   *
+   * НЕ ПО ТЕКСТУ!
+   *
+   * Это важно, потому что два разных
+   * Telegram-поста могут иметь одинаковый текст.
+   * =================================================
    */
 
-  return posts.reverse();
-}
+  const seen =
+    new Set();
 
+  const uniquePosts =
+    posts.filter(post => {
 
-/* =========================
-   BOT API
-========================= */
+      if (
+        seen.has(post.id)
+      ) {
+        return false;
+      }
 
-async function fetchBotUpdates() {
+      seen.add(post.id);
 
-  if (!BOT_TOKEN) {
-    return [];
-  }
-
-
-  const url =
-    `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates` +
-    `?timeout=1&allowed_updates=%5B%22channel_post%22%5D`;
-
-
-  const response =
-    await fetch(url);
-
-
-  if (!response.ok) {
-    throw new Error(
-      `Telegram Bot API HTTP ${response.status}`
-    );
-  }
-
-
-  const data =
-    await response.json();
-
-
-  if (!data.ok) {
-
-    throw new Error(
-      `Telegram Bot API: ${
-        data.description || 'Unknown error'
-      }`
-    );
-
-  }
-
-
-  const posts = [];
-
-
-  for (const update of data.result || []) {
-
-    const message =
-      update.channel_post;
-
-
-    if (!message) {
-      continue;
-    }
-
-
-    const username =
-      message.chat?.username || '';
-
-
-    if (
-      username &&
-      username.toLowerCase() !==
-      CHANNEL.toLowerCase()
-    ) {
-      continue;
-    }
-
-
-    const id =
-      String(message.message_id);
-
-
-    const text =
-      cleanText(
-        message.text ||
-        message.caption ||
-        ''
-      );
-
-
-    if (!text) {
-      continue;
-    }
-
-
-    posts.push({
-
-      id: `bot-${id}`,
-
-      text,
-
-      date: message.date
-        ? new Date(
-            message.date * 1000
-          ).toISOString()
-        : '',
-
-      image: '',
-
-      url:
-        `https://t.me/${CHANNEL}/${id}`
+      return true;
 
     });
 
-  }
 
+  /*
+   * Берём только последние MAX_POSTS.
+   */
 
-  return posts;
+  return uniquePosts.slice(
+    0,
+    MAX_POSTS
+  );
 }
 
 
-/* =========================
-   ОБНОВЛЕНИЕ
-========================= */
+/* =========================================================
+   ПОЛНАЯ СИНХРОНИЗАЦИЯ
+========================================================= */
 
 async function refreshPosts() {
 
+  /*
+   * Если обновление уже идёт,
+   * второй запрос не запускаем.
+   */
   if (refreshing) {
+
+    console.log(
+      '[Telegram] Обновление уже выполняется'
+    );
+
     return cache;
+
   }
 
 
@@ -328,105 +412,96 @@ async function refreshPosts() {
 
   try {
 
-    let publicPosts = [];
-
-    let botPosts = [];
+    console.log(
+      '[Telegram] Проверяем актуальные публикации...'
+    );
 
 
     /*
-     * Сначала публичная лента
+     * Получаем ТЕКУЩЕЕ состояние Telegram.
      */
-
-    try {
-
-      publicPosts =
-        await fetchPublicTelegramPosts();
+    const telegramPosts =
+      await fetchPublicTelegramPosts();
 
 
-      console.log(
-        `[Telegram] Public posts: ${publicPosts.length}`
-      );
-
-    } catch (error) {
-
-      console.error(
-        '[Telegram] Public feed failed:',
-        error.message
-      );
-
-    }
+    console.log(
+      `[Telegram] Сейчас найдено: ${telegramPosts.length}`
+    );
 
 
     /*
-     * Затем Bot API
-     */
-
-    try {
-
-      botPosts =
-        await fetchBotUpdates();
-
-
-      console.log(
-        `[Telegram] Bot posts: ${botPosts.length}`
-      );
-
-    } catch (error) {
-
-      console.error(
-        '[Telegram] Bot API failed:',
-        error.message
-      );
-
-    }
-
-
-    /*
-     * Объединяем.
+     * =================================================
+     * ПОЛНАЯ ЗАМЕНА CACHE
+     * =================================================
      *
-     * Публичные посты идут первыми,
-     * поэтому актуальная версия поста
-     * имеет приоритет.
+     * Именно это обеспечивает удаление:
+     *
+     * Telegram:
+     *
+     * 100
+     * 101
+     * 102
+     *
+     * удалили 101:
+     *
+     * 100
+     * 102
+     *
+     * cache тоже становится:
+     *
+     * 100
+     * 102
+     *
+     * Старого 101 больше нет.
      */
 
-    const combined =
-      uniquePosts([
-        ...publicPosts,
-        ...botPosts
-      ]);
+    cache =
+      telegramPosts;
 
 
     /*
-     * Если получили данные —
-     * полностью обновляем список.
+     * Время успешной синхронизации.
      */
 
-    if (combined.length > 0) {
-
-      cache =
-        combined.slice(0, 12);
-
-      lastUpdated =
-        new Date().toISOString();
+    lastUpdated =
+      new Date().toISOString();
 
 
-      console.log(
-        `[Telegram] Website posts: ${cache.length}`
-      );
+    console.log(
+      `[Telegram] Синхронизация завершена. На сайте: ${cache.length}`
+    );
 
-    } else {
 
-      console.log(
-        `[Telegram] No posts received. Cache kept: ${cache.length}`
-      );
+    /*
+     * Показываем ID для удобной диагностики.
+     */
 
-    }
+    console.log(
+      '[Telegram] ID:',
+      cache.map(post => post.id).join(', ')
+    );
+
 
   } catch (error) {
 
+    /*
+     * ВАЖНО:
+     *
+     * Если Telegram временно недоступен,
+     * НЕ очищаем cache.
+     *
+     * Иначе кратковременный сбой Telegram
+     * мог бы удалить все публикации с сайта.
+     */
+
     console.error(
-      '[Telegram] Refresh failed:',
+      '[Telegram] Ошибка синхронизации:',
       error.message
+    );
+
+
+    console.log(
+      `[Telegram] Сохраняем текущие ${cache.length} публикаций`
     );
 
   } finally {
@@ -440,15 +515,31 @@ async function refreshPosts() {
 }
 
 
-/* =========================
-   API
-========================= */
+/* =========================================================
+   API ПОСТОВ
+========================================================= */
 
 app.get(
   '/api/posts',
   async (_req, res) => {
 
     await refreshPosts();
+
+
+    res.setHeader(
+      'Cache-Control',
+      'no-store, no-cache, must-revalidate, proxy-revalidate'
+    );
+
+    res.setHeader(
+      'Pragma',
+      'no-cache'
+    );
+
+    res.setHeader(
+      'Expires',
+      '0'
+    );
 
 
     res.json({
@@ -468,9 +559,9 @@ app.get(
 );
 
 
-/* =========================
+/* =========================================================
    HEALTH
-========================= */
+========================================================= */
 
 app.get(
   '/api/health',
@@ -487,7 +578,9 @@ app.get(
         cache.length,
 
       updatedAt:
-        lastUpdated
+        lastUpdated,
+
+      refreshing
 
     });
 
@@ -495,9 +588,45 @@ app.get(
 );
 
 
-/* =========================
-   SITE
-========================= */
+/* =========================================================
+   РУЧНАЯ СИНХРОНИЗАЦИЯ
+========================================================= */
+
+app.post(
+  '/api/refresh',
+  async (_req, res) => {
+
+    const posts =
+      await refreshPosts();
+
+
+    res.setHeader(
+      'Cache-Control',
+      'no-store'
+    );
+
+
+    res.json({
+
+      ok: true,
+
+      channel:
+        `@${CHANNEL}`,
+
+      updatedAt:
+        lastUpdated,
+
+      posts
+
+    });
+
+  }
+);
+
+
+/* =========================================================
+   ВСЕ ОСТАЛЬНЫЕ ЗАПРОСЫ
+========================================================= */
 
 app.use(
   (_req, res) => {
@@ -514,31 +643,67 @@ app.use(
 );
 
 
-/* =========================
-   START
-========================= */
+/* =========================================================
+   ЗАПУСК
+========================================================= */
 
 app.listen(
   PORT,
   '0.0.0.0',
   async () => {
 
+    console.log('');
     console.log(
-      `Напоминание v1.9.1 started on port ${PORT}`
+      '=========================================='
     );
 
     console.log(
-      `Telegram source: ${CHANNEL_URL}`
+      'Напоминание v2.0'
     );
 
     console.log(
-      `Bot API: ${
-        BOT_TOKEN
-          ? 'configured'
-          : 'NOT configured'
-      }`
+      '=========================================='
     );
 
+    console.log(
+      `Порт: ${PORT}`
+    );
+
+    console.log(
+      `Telegram: ${CHANNEL_URL}`
+    );
+
+    console.log(
+      `Максимум постов: ${MAX_POSTS}`
+    );
+
+    console.log(
+      'Синхронизация: каждые 60 секунд'
+    );
+
+    console.log(
+      'Удаление: включено'
+    );
+
+    console.log(
+      'Изменение постов: включено'
+    );
+
+    console.log(
+      'Новые посты: включено'
+    );
+
+    console.log(
+      '=========================================='
+    );
+
+    console.log('');
+
+
+    /*
+     * Первая синхронизация
+     * сразу после запуска.
+     */
 
     await refreshPosts();
 
@@ -546,11 +711,20 @@ app.listen(
 );
 
 
-/* =========================
-   AUTO REFRESH
-========================= */
+/* =========================================================
+   АВТОМАТИЧЕСКАЯ СИНХРОНИЗАЦИЯ
+========================================================= */
 
 setInterval(
-  refreshPosts,
-  60 * 1000
+  async () => {
+
+    console.log('');
+    console.log(
+      '[Telegram] Автоматическая проверка...'
+    );
+
+    await refreshPosts();
+
+  },
+  REFRESH_INTERVAL
 );
