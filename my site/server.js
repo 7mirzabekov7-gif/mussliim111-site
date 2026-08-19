@@ -10,8 +10,6 @@ const CHANNEL = (process.env.CHANNEL || '@mussliim111')
   .replace(/^@/, '')
   .trim();
 
-const BOT_TOKEN = (process.env.BOT_TOKEN || '').trim();
-
 const CHANNEL_URL = `https://t.me/s/${CHANNEL}`;
 
 app.use(express.json());
@@ -35,7 +33,8 @@ function cleanText(value = '') {
 
 
 /*
- * Нормализация текста для удаления дублей
+ * Нормализация текста
+ * для удаления одинаковых публикаций
  */
 function normalize(value = '') {
   return cleanText(value)
@@ -66,7 +65,7 @@ function uniquePosts(posts) {
 
 
 /*
- * Получение существующих публикаций
+ * Получение АКТУАЛЬНЫХ публикаций
  * из публичной ленты Telegram
  */
 async function fetchPublicTelegramPosts() {
@@ -91,18 +90,32 @@ async function fetchPublicTelegramPosts() {
   $('.tgme_widget_message').each((_, element) => {
     const node = $(element);
 
+    /*
+     * ID сообщения Telegram
+     */
     const dataPost = node.attr('data-post') || '';
     const id = dataPost.split('/').pop();
 
-    if (!id) return;
+    if (!id) {
+      return;
+    }
 
+    /*
+     * Текст публикации
+     */
     const text = cleanText(
       node.find('.tgme_widget_message_text').text()
     );
 
+    /*
+     * Дата публикации
+     */
     const time =
       node.find('time').attr('datetime') || '';
 
+    /*
+     * Ссылка на публикацию
+     */
     const link =
       node.find('.tgme_widget_message_date').attr('href') ||
       `https://t.me/${CHANNEL}/${id}`;
@@ -148,8 +161,8 @@ async function fetchPublicTelegramPosts() {
     }
 
     /*
-     * Публикация должна иметь либо текст,
-     * либо изображение.
+     * Если нет ни текста,
+     * ни картинки — пропускаем
      */
     if (!text && !image) {
       return;
@@ -164,87 +177,10 @@ async function fetchPublicTelegramPosts() {
     });
   });
 
+  /*
+   * Самые новые публикации будут первыми
+   */
   return posts.reverse();
-}
-
-
-/*
- * Получение новых публикаций через Bot API
- */
-async function fetchBotUpdates() {
-  if (!BOT_TOKEN) {
-    return [];
-  }
-
-  const url =
-    `https://api.telegram.org/bot${BOT_TOKEN}/getUpdates` +
-    `?timeout=1&allowed_updates=%5B%22channel_post%22%5D`;
-
-  const response = await fetch(url);
-
-  if (!response.ok) {
-    throw new Error(
-      `Telegram Bot API HTTP ${response.status}`
-    );
-  }
-
-  const data = await response.json();
-
-  if (!data.ok) {
-    throw new Error(
-      `Telegram Bot API: ${data.description || 'Unknown error'}`
-    );
-  }
-
-  const posts = [];
-
-  for (const update of data.result || []) {
-    const message = update.channel_post;
-
-    if (!message) {
-      continue;
-    }
-
-    const chatUsername =
-      message.chat?.username || '';
-
-    /*
-     * Берём сообщения только из нашего канала
-     */
-    if (
-      chatUsername &&
-      chatUsername.toLowerCase() !==
-        CHANNEL.toLowerCase()
-    ) {
-      continue;
-    }
-
-    const id = String(message.message_id);
-
-    const text = cleanText(
-      message.text ||
-      message.caption ||
-      ''
-    );
-
-    if (!text) {
-      continue;
-    }
-
-    posts.push({
-      id: `bot-${id}`,
-      text,
-      date: message.date
-        ? new Date(
-            message.date * 1000
-          ).toISOString()
-        : '',
-      image: '',
-      url: `https://t.me/${CHANNEL}/${id}`
-    });
-  }
-
-  return posts;
 }
 
 
@@ -259,90 +195,57 @@ async function refreshPosts() {
   refreshing = true;
 
   try {
-    let publicPosts = [];
-    let botPosts = [];
+    console.log(
+      '[Telegram] Получаем актуальные публикации...'
+    );
 
     /*
-     * 1. Получаем реальные посты
-     * из публичного Telegram-канала
+     * Получаем текущее состояние канала
      */
-    try {
-      publicPosts =
-        await fetchPublicTelegramPosts();
+    const publicPosts =
+      await fetchPublicTelegramPosts();
 
-      console.log(
-        `[Telegram] Public posts: ${publicPosts.length}`
-      );
-
-    } catch (error) {
-      console.error(
-        '[Telegram] Public feed failed:',
-        error.message
-      );
-    }
-
+    console.log(
+      `[Telegram] Получено публикаций: ${publicPosts.length}`
+    );
 
     /*
-     * 2. Получаем новые посты через бота
+     * Убираем одинаковые публикации
+     */
+    const unique = uniquePosts(publicPosts);
+
+    /*
+     * ВАЖНО:
      *
-     * Если Bot API не работает,
-     * сайт всё равно продолжит работать
-     * через публичную ленту.
-     */
-    if (BOT_TOKEN) {
-      try {
-        botPosts =
-          await fetchBotUpdates();
-
-        console.log(
-          `[Telegram] Bot posts: ${botPosts.length}`
-        );
-
-      } catch (error) {
-        console.error(
-          '[Telegram] Bot API failed:',
-          error.message
-        );
-      }
-    }
-
-
-    /*
-     * 3. Объединяем источники
-     */
-    const combined = uniquePosts([
-      ...botPosts,
-      ...publicPosts
-    ]);
-
-
-    /*
-     * 4. Если Telegram реально отдал публикации,
-     * заменяем старый список.
+     * Мы полностью заменяем cache новым списком.
      *
-     * Никаких fallback-постов здесь нет.
+     * Поэтому:
+     *
+     * новый пост → появляется
+     * удалённый пост → исчезает
+     * изменённый пост → обновляется
      */
-    if (combined.length > 0) {
-      cache = combined.slice(0, 12);
+    cache = unique.slice(0, 12);
 
-      lastUpdated =
-        new Date().toISOString();
+    /*
+     * Обновляем время
+     */
+    lastUpdated = new Date().toISOString();
 
-      console.log(
-        `[Telegram] Total unique posts: ${cache.length}`
-      );
-
-    } else {
-      /*
-       * Если новых данных нет,
-       * оставляем старые реальные посты.
-       */
-      console.log(
-        `[Telegram] No posts received. Keeping current cache: ${cache.length}`
-      );
-    }
+    console.log(
+      `[Telegram] На сайте сейчас: ${cache.length} публикаций`
+    );
 
   } catch (error) {
+
+    /*
+     * Если Telegram временно недоступен,
+     * НЕ удаляем уже загруженные публикации.
+     *
+     * Это важно:
+     * временная ошибка Telegram не должна
+     * очищать весь сайт.
+     */
     console.error(
       '[Telegram] Refresh failed:',
       error.message
@@ -360,6 +263,7 @@ async function refreshPosts() {
  * API публикаций
  */
 app.get('/api/posts', async (_req, res) => {
+
   await refreshPosts();
 
   res.json({
@@ -374,12 +278,14 @@ app.get('/api/posts', async (_req, res) => {
  * Проверка сервера
  */
 app.get('/api/health', (_req, res) => {
+
   res.json({
     ok: true,
     channel: `@${CHANNEL}`,
     posts: cache.length,
     updatedAt: lastUpdated
   });
+
 });
 
 
@@ -388,6 +294,7 @@ app.get('/api/health', (_req, res) => {
  * отправляем на index.html
  */
 app.use((_req, res) => {
+
   res.sendFile(
     path.join(
       __dirname,
@@ -395,6 +302,7 @@ app.use((_req, res) => {
       'index.html'
     )
   );
+
 });
 
 
@@ -407,29 +315,22 @@ app.listen(
   async () => {
 
     console.log(
-      `Напоминание v1.8.2 started on port ${PORT}`
+      `Напоминание v1.9 started on port ${PORT}`
     );
 
     console.log(
       `Telegram source: ${CHANNEL_URL}`
     );
 
-    console.log(
-      `Bot API: ${
-        BOT_TOKEN
-          ? 'configured'
-          : 'not configured'
-      }`
-    );
-
     await refreshPosts();
+
   }
 );
 
 
 /*
  * Автоматическое обновление
- * раз в минуту
+ * каждую минуту
  */
 setInterval(
   refreshPosts,
