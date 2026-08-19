@@ -1140,4 +1140,19 @@ h2 {
     animation-iteration-count: 1 !important;
     transition-duration: .01ms !important;
   }
+  .refresh.loading {
+  animation: refreshSpin .8s linear infinite;
+  opacity: .65;
+  cursor: wait;
+}
+
+@keyframes refreshSpin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
 }
