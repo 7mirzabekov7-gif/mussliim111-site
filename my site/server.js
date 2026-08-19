@@ -42,27 +42,30 @@ function normalize(value = '') {
 
 function uniquePosts(posts) {
   const seen = new Set();
+
   return posts.filter(post => {
     const key = normalize(post.text);
-    if (!key || seen.has(key)) return false;
+
+    if (!key || seen.has(key)) {
+      return false;
+    }
+
     seen.add(key);
     return true;
   });
 }
 
-function extractMessageId(postUrl) {
-  const match = String(postUrl || '').match(/\/([0-9]+)$/);
-  return match ? match[1] : null;
-}
-
 async function fetchTelegramPosts() {
   const response = await fetch(CHANNEL_URL, {
     headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36'
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36'
     }
   });
 
-  if (!response.ok) throw new Error(`Telegram returned HTTP ${response.status}`);
+  if (!response.ok) {
+    throw new Error(`Telegram returned HTTP ${response.status}`);
+  }
 
   const html = await response.text();
   const $ = cheerio.load(html);
@@ -70,28 +73,54 @@ async function fetchTelegramPosts() {
 
   $('.tgme_widget_message').each((_, element) => {
     const node = $(element);
+
     const dataPost = node.attr('data-post') || '';
     const id = dataPost.split('/').pop();
+
     if (!id) return;
 
-    const text = cleanText(node.find('.tgme_widget_message_text').text());
+    const text = cleanText(
+      node.find('.tgme_widget_message_text').text()
+    );
+
     const time = node.find('time').attr('datetime') || '';
-    const link = node.find('.tgme_widget_message_date').attr('href') || `https://t.me/${CHANNEL}/${id}`;
+
+    const link =
+      node.find('.tgme_widget_message_date').attr('href') ||
+      `https://t.me/${CHANNEL}/${id}`;
 
     let image = '';
-    const photo = node.find('.tgme_widget_message_photo_wrap').first();
+
+    const photo = node
+      .find('.tgme_widget_message_photo_wrap')
+      .first();
+
     if (photo.length) {
       const style = photo.attr('style') || '';
-      const match = style.match(/url\(['"]?([^'"\)]+)['"]?\)/);
-      if (match) image = match[1];
+      const match = style.match(
+        /url\(['"]?([^'"\)]+)['"]?\)/
+      );
+
+      if (match) {
+        image = match[1];
+      }
     }
 
-    // Some posts use a video preview rather than a photo wrapper.
+    // Если у публикации видео-превью
     if (!image) {
-      const video = node.find('.tgme_widget_message_video_player').first();
+      const video = node
+        .find('.tgme_widget_message_video_player')
+        .first();
+
       const style = video.attr('style') || '';
-      const match = style.match(/url\(['"]?([^'"\)]+)['"]?\)/);
-      if (match) image = match[1];
+
+      const match = style.match(
+        /url\(['"]?([^'"\)]+)['"]?\)/
+      );
+
+      if (match) {
+        image = match[1];
+      }
     }
 
     if (!text && !image) return;
@@ -109,24 +138,44 @@ async function fetchTelegramPosts() {
 }
 
 async function refreshPosts() {
-  if (refreshing) return cache;
+  if (refreshing) {
+    return cache;
+  }
+
   refreshing = true;
+
   try {
     const posts = await fetchTelegramPosts();
-    if (posts.length) cache = posts;
+
+    if (posts.length) {
+      cache = posts;
+    }
+
     lastUpdated = new Date().toISOString();
-    console.log(`[Telegram] Loaded ${posts.length} unique posts`);
+
+    console.log(
+      `[Telegram] Loaded ${posts.length} unique posts`
+    );
   } catch (error) {
-    console.error('[Telegram] Refresh failed:', error.message);
-    if (!cache.length) cache = fallbackPosts;
+    console.error(
+      '[Telegram] Refresh failed:',
+      error.message
+    );
+
+    if (!cache.length) {
+      cache = fallbackPosts;
+    }
   } finally {
     refreshing = false;
   }
+
   return cache;
 }
 
+// API: публикации Telegram
 app.get('/api/posts', async (_req, res) => {
   await refreshPosts();
+
   res.json({
     channel: `@${CHANNEL}`,
     updatedAt: lastUpdated,
@@ -134,19 +183,38 @@ app.get('/api/posts', async (_req, res) => {
   });
 });
 
+// API: проверка работы сервера
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, channel: `@${CHANNEL}`, updatedAt: lastUpdated });
+  res.json({
+    ok: true,
+    channel: `@${CHANNEL}`,
+    updatedAt: lastUpdated
+  });
 });
 
-app.get('*', (_req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
+// Все остальные страницы отправляем на index.html.
+// ВАЖНО: здесь больше нет app.get('*')
+app.use((_req, res) => {
+  res.sendFile(
+    path.join(__dirname, 'public', 'index.html')
+  );
 });
 
+// Запуск сервера
 app.listen(PORT, '0.0.0.0', async () => {
-  console.log(`Напоминание v1.8 started on port ${PORT}`);
-  console.log(`Telegram source: ${CHANNEL_URL}`);
+  console.log(
+    `Напоминание v1.8 started on port ${PORT}`
+  );
+
+  console.log(
+    `Telegram source: ${CHANNEL_URL}`
+  );
+
   await refreshPosts();
 });
 
-// Automatic server-side refresh while the Render instance is awake.
-setInterval(refreshPosts, 60 * 1000);
+// Обновление Telegram каждые 60 секунд
+setInterval(
+  refreshPosts,
+  60 * 1000
+);
