@@ -2,62 +2,232 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  />
+
   <meta name="theme-color" content="#050505" />
-  <meta name="description" content="Напоминание — канал с полезными напоминаниями для сердца." />
+
+  <meta
+    name="description"
+    content="Напоминание — канал с полезными напоминаниями для сердца."
+  />
+
   <title>Напоминание — mussliim111</title>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Cormorant+Garamond:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap"
+    rel="stylesheet"
+  >
+
   <link rel="stylesheet" href="/style.css" />
 </head>
+
 <body>
+
+  <!-- Фоновое свечение -->
   <div class="glow glow-one"></div>
   <div class="glow glow-two"></div>
 
+
+  <!-- =========================
+       ВЕРХНЕЕ МЕНЮ
+  ========================== -->
+
   <header class="topbar">
-    <a class="brand" href="/" aria-label="На главную">
+
+    <a
+      class="brand"
+      href="/"
+      aria-label="На главную"
+    >
       <span class="moon">☾</span>
       <span>напоминание</span>
     </a>
-    <a class="telegram-mini" href="https://t.me/mussliim111" target="_blank" rel="noopener">✈ Telegram</a>
+
+    <a
+      class="telegram-mini"
+      href="https://t.me/mussliim111"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      ✈ Telegram
+    </a>
+
   </header>
 
+
   <main>
+
+
+    <!-- =========================
+         ГЛАВНЫЙ ЭКРАН
+    ========================== -->
+
     <section class="hero reveal">
-      <div class="eyebrow">Н А П О М И Н А Н И Е&nbsp; Д Л Я&nbsp; С Е Р Д Ц А</div>
-      <div class="avatar-wrap">
-        <img src="/avatar.jpg" alt="Аватар канала" class="avatar" />
-        <span class="avatar-ring"></span>
+
+      <div class="eyebrow">
+        Н А П О М И Н А Н И Е&nbsp;
+        Д Л Я&nbsp;
+        С Е Р Д Ц А
       </div>
+
+
+      <!-- Аватар канала -->
+      <div class="avatar-wrap">
+
+        <img
+          src="/avatar.jpg"
+          alt="Аватар канала"
+          class="avatar"
+          loading="eager"
+        />
+
+        <span class="avatar-ring"></span>
+
+      </div>
+
+
       <h1>Напоминание</h1>
-      <div class="ornament"><span></span><b>✦</b><span></span></div>
-      <p class="arabic" lang="ar">وَذَكِّرْ فَإِنَّ الذِّكْرَىٰ تَنْفَعُ الْمُؤْمِنِينَ</p>
-      <p class="quote">«И напоминай, ибо напоминание приносит пользу верующим»</p>
-      <p class="source">— Сура «Аз-Зарият», 51:55</p>
-      <a class="primary-btn" href="https://t.me/mussliim111" target="_blank" rel="noopener">✈ Перейти в Telegram</a>
-      <a class="secondary-btn" href="#latest">Узнать больше <span>↓</span></a>
+
+
+      <div class="ornament">
+        <span></span>
+        <b>✦</b>
+        <span></span>
+      </div>
+
+
+      <!-- Арабская каллиграфия -->
+      <p
+        class="arabic"
+        lang="ar"
+        dir="rtl"
+      >
+        وَذَكِّرْ فَإِنَّ الذِّكْرَىٰ تَنْفَعُ الْمُؤْمِنِينَ
+      </p>
+
+
+      <p class="quote">
+        «И напоминай, ибо напоминание приносит пользу верующим»
+      </p>
+
+
+      <p class="source">
+        — Сура «Аз-Зарият», 51:55
+      </p>
+
+
+      <!-- Основная кнопка -->
+      <a
+        class="primary-btn"
+        href="https://t.me/mussliim111"
+        target="_blank"
+        rel="noopener noreferrer"
+      >
+        ✈ Перейти в Telegram
+      </a>
+
+
+      <!-- Прокрутка -->
+      <a
+        class="secondary-btn"
+        href="#latest"
+      >
+        Последние напоминания
+        <span>↓</span>
+      </a>
+
     </section>
 
-    <section id="latest" class="latest reveal">
+
+
+    <!-- =========================
+         ПОСЛЕДНИЕ ПОСТЫ
+    ========================== -->
+
+    <section
+      id="latest"
+      class="latest reveal"
+    >
+
       <div class="section-head">
+
         <div>
-          <span class="section-kicker">ИЗ КАНАЛА</span>
-          <h2>Последние напоминания</h2>
+
+          <span class="section-kicker">
+            ИЗ КАНАЛА
+          </span>
+
+          <h2>
+            Последние напоминания
+          </h2>
+
         </div>
-        <button id="refresh" class="refresh" type="button" aria-label="Обновить">↻</button>
+
+
+        <!-- Обновить -->
+        <button
+          id="refresh"
+          class="refresh"
+          type="button"
+          aria-label="Обновить публикации"
+          title="Обновить"
+        >
+          ↻
+        </button>
+
       </div>
-      <p id="status" class="status">Загружаем последние публикации…</p>
-      <div id="posts" class="posts"></div>
+
+
+      <p
+        id="status"
+        class="status"
+      >
+        Загружаем последние публикации…
+      </p>
+
+
+      <div
+        id="posts"
+        class="posts"
+      ></div>
+
     </section>
+
   </main>
 
+
+
+  <!-- =========================
+       FOOTER
+  ========================== -->
+
   <footer class="footer">
+
     <div class="footer-line"></div>
-    <p>Пусть каждое напоминание принесёт пользу.</p>
-    <a href="https://t.me/mussliim111" target="_blank" rel="noopener">@mussliim111</a>
+
+    <p>
+      Пусть каждое напоминание принесёт пользу.
+    </p>
+
+    <a
+      href="https://t.me/mussliim111"
+      target="_blank"
+      rel="noopener noreferrer"
+    >
+      @mussliim111
+    </a>
+
   </footer>
 
+
   <script src="/app.js"></script>
+
 </body>
 </html>
